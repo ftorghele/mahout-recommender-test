@@ -8,10 +8,15 @@ import java.io.IOException;
 import org.apache.commons.cli2.OptionException; 
 import org.apache.mahout.cf.taste.common.TasteException;
 import org.apache.mahout.cf.taste.impl.model.file.FileDataModel;
+import org.apache.mahout.cf.taste.impl.neighborhood.NearestNUserNeighborhood;
 import org.apache.mahout.cf.taste.impl.recommender.CachingRecommender;
-import org.apache.mahout.cf.taste.impl.recommender.slopeone.SlopeOneRecommender;
+import org.apache.mahout.cf.taste.impl.recommender.GenericUserBasedRecommender;
+import org.apache.mahout.cf.taste.impl.similarity.PearsonCorrelationSimilarity;
 import org.apache.mahout.cf.taste.model.DataModel;
+import org.apache.mahout.cf.taste.neighborhood.UserNeighborhood;
 import org.apache.mahout.cf.taste.recommender.RecommendedItem;
+import org.apache.mahout.cf.taste.recommender.Recommender;
+import org.apache.mahout.cf.taste.similarity.UserSimilarity;
 import org.apache.mahout.cf.taste.impl.common.LongPrimitiveIterator;
 
 public class UserBasedRecommend {
@@ -19,11 +24,20 @@ public class UserBasedRecommend {
     public static void main(String... args) throws FileNotFoundException, TasteException, IOException, OptionException {
         
         // create data source (model) - from the csv file            
-        File ratingsFile = new File("datasets/bool-recommend-dummy.csv");                        
+        File ratingsFile = new File("datasets/movielens/ratings.csv");                        
         DataModel model = new FileDataModel(ratingsFile);
         
-        // create a simple recommender on our data
-        CachingRecommender cachingRecommender = new CachingRecommender(new SlopeOneRecommender(model));
+        // We'll use the PearsonCorrelationSimilarity implementation of UserSimilarity 
+        // as our user correlation algorithm, and add an optional preference inference algorithm:
+        UserSimilarity userSimilarity = new PearsonCorrelationSimilarity(model);
+        // Optional:
+        //userSimilarity.setPreferenceInferrer(new AveragingPreferenceInferrer());
+
+        // Now we create a UserNeighborhood algorithm. Here we use nearest-3:
+        UserNeighborhood neighborhood = new NearestNUserNeighborhood(3, userSimilarity, model);
+        // Now we can create our Recommender, and add a caching decorator:
+        Recommender recommender = new GenericUserBasedRecommender(model, neighborhood, userSimilarity);
+        Recommender cachingRecommender = new CachingRecommender(recommender);
 
         // for all users
         for (LongPrimitiveIterator it = model.getUserIDs(); it.hasNext();){
