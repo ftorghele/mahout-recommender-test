@@ -25,7 +25,7 @@ public final class CustomSimilarity extends AbstractSimilarity {
     super(dataModel, weighting, true);
     Preconditions.checkArgument(dataModel.hasPreferenceValues(), "DataModel doesn't have preference values");
   
-    File userMapFile = new File("datasets/movielens/ml-100k/users.csv");
+    File userMapFile = new File("datasets/ml-100k/users.csv");
 	Scanner scan = null;
 	try {
 		scan = new Scanner(userMapFile);

@@ -7,7 +7,7 @@ import org.apache.commons.cli2.OptionException;
 import org.apache.mahout.cf.taste.common.TasteException;
 import org.apache.mahout.cf.taste.eval.RecommenderBuilder;
 import org.apache.mahout.cf.taste.eval.RecommenderEvaluator;
-import org.apache.mahout.cf.taste.impl.eval.CustomEvaluator;
+import org.apache.mahout.cf.taste.impl.eval.RMSRecommenderEvaluator;
 import org.apache.mahout.cf.taste.impl.model.file.FileDataModel;
 import org.apache.mahout.cf.taste.impl.neighborhood.NearestNUserNeighborhood;
 import org.apache.mahout.cf.taste.impl.recommender.CachingRecommender;
@@ -23,21 +23,18 @@ public final class CustomRecommendEvaluator{
  
 		RecommenderBuilder builder = new RecommenderBuilder() {
 			public Recommender buildRecommender(DataModel model) throws TasteException{        
-		        // use our own custom algorithm:
 		        UserSimilarity userSimilarity = new CustomSimilarity(model);
-		        // Now we create a UserNeighborhood algorithm. Here we use nearest-3:
 		        UserNeighborhood neighborhood = new NearestNUserNeighborhood(3, userSimilarity, model);
-		        // Now we can create our Recommender, and add a caching decorator:
 		        Recommender recommender = new GenericUserBasedRecommender(model, neighborhood, userSimilarity);
 		        return new CachingRecommender(recommender);
 			}
 		};
- 
-		RecommenderEvaluator evaluator = new CustomEvaluator();
-		DataModel dataModel = new FileDataModel(new File("datasets/movielens/ml-100k/ratings.csv"));
+		
+		RecommenderEvaluator evaluator = new RMSRecommenderEvaluator();
+		DataModel model = new FileDataModel(new File("datasets/ml-100k/ratings.csv"));
 		double score = evaluator.evaluate(builder,
 				null,
-				dataModel,
+				model,
 				0.8,
 				1);
  
