@@ -2,9 +2,9 @@ package org.movlib;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Random;
-
 import org.apache.commons.cli2.OptionException;
 import org.apache.mahout.cf.taste.common.TasteException;
 import org.apache.mahout.cf.taste.eval.RecommenderBuilder;
@@ -25,18 +25,19 @@ import org.apache.mahout.cf.taste.model.PreferenceArray;
 import org.apache.mahout.cf.taste.neighborhood.UserNeighborhood;
 import org.apache.mahout.cf.taste.recommender.Recommender;
 import org.apache.mahout.cf.taste.similarity.UserSimilarity;
-import org.apache.mahout.common.RandomUtils;
-
 import com.google.common.collect.Lists;
 
 /**
  * if out of memory: export MAVEN_OPTS="-Xmx1024m"
+ * mvn exec:java -Dexec.mainClass="org.movlib.CrossValidationEvaluator"
  */
 
 public class CrossValidationEvaluator {
 	
 	public static void main(String... args) throws IOException, TasteException,
 			OptionException {
+		
+		int setCount = 10;
 
 		// get all recommendations
 		DataModel allRecommendations = new FileDataModel(new File(
@@ -54,49 +55,54 @@ public class CrossValidationEvaluator {
 				return new CachingRecommender(recommender);
 			}
 		};
-
-		// prepare Datasets
-		int setCount = 10;
-
-		DataModel[] tenFoldDataset = prepareTenFold(allRecommendations, setCount);
-		DataModel[] bootstrappedDataset = prepareBootstrap(allRecommendations, setCount);
-		//DataModel[] jackknifedDataset = prepareJackknife(allRecommendations, setCount);
 		
 		// 10-fold cross validation
 		double tenFoldRMSE = 0.0;
-		System.out.println("\n10-fold cross validation:");
+		System.out.println("\n" + setCount + "-fold cross validation:");
+		
+		DataModel[] tenFoldDataset = prepareTenFold(allRecommendations, setCount);
+		
 		for (int i = 0; i < setCount; i++) {
 			DataModel trainingModel = prepareTrainingSet(tenFoldDataset, i);
-			System.out.print(".");
 			DataModel testModel = tenFoldDataset[i];
 			CustomEvaluator evaluator = new CustomEvaluator();
-			tenFoldRMSE += evaluator.evaluate(builder, null, trainingModel,	testModel);
+			double RMSE = evaluator.evaluate(builder, null, trainingModel, testModel); 
+			tenFoldRMSE += RMSE;
+			System.out.println((i+1) + "/"+ setCount + " RSME: " + RMSE);
 		}
-		System.out.println("\nRMSE: " + tenFoldRMSE/setCount);
+		System.out.println("\nRMSE avg: " + tenFoldRMSE/setCount);
 		
 		// Bootstrapped 10-fold cross validation
 		double bootstrappedRMSE = 0.0;
-		System.out.println("\nBootstrapped 10-fold cross validation:");
+		System.out.println("\nBootstrapped " + setCount + "-fold cross validation:");
 		for (int i = 0; i < setCount; i++) {
+			
+			DataModel[] bootstrappedDataset = prepareBootstrap(allRecommendations, setCount);
+			
 			DataModel trainingModel = prepareTrainingSet(bootstrappedDataset, i);
-			System.out.print(".");
 			DataModel testModel = bootstrappedDataset[i];
 			CustomEvaluator evaluator = new CustomEvaluator();
-			bootstrappedRMSE += evaluator.evaluate(builder, null, trainingModel,	testModel);
+			double RMSE = evaluator.evaluate(builder, null, trainingModel, testModel); 
+			bootstrappedRMSE += RMSE;
+			System.out.println((i+1) + "/"+ setCount + " RSME: " + RMSE);
 		}
-		System.out.println("\nRMSE: " + bootstrappedRMSE/setCount);
+		System.out.println("\nRMSE avg: " + bootstrappedRMSE/setCount);
 		
 		// Jackknifed 10-fold cross validation
 //		double jackknifedRMSE = 0.0;
-//		System.out.println("Jackknifed 10-fold cross validation:");
+//		System.out.println("Jackknifed " + setCount + "-fold-fold cross validation:");
 //		for (int i = 0; i < setCount; i++) {
+//		
+//		    DataModel[] jackknifedDataset = prepareJackknife(allRecommendations, setCount);
+//		
 //			DataModel trainingModel = prepareTrainingSet(jackknifedDataset, i);
-//			System.out.print(".");
 //			DataModel testModel = jackknifedDataset[i];
 //			CustomEvaluator evaluator = new CustomEvaluator();
-//			jackknifedRMSE += evaluator.evaluate(builder, null, trainingModel,	testModel);
+//			double RMSE = evaluator.evaluate(builder, null, trainingModel, testModel); 
+//			jackknifedRMSE += RMSE;
+//			System.out.println((i+1) + "/"+ setCount + " RSME: " + RMSE);
 //		}
-//		System.out.println("\nRMSE: " + jackknifedRMSE/setCount);
+//		System.out.println("\nRMSE avg: " + jackknifedRMSE/setCount);
 	}
 	
 	private static DataModel prepareTrainingSet(DataModel[] dataModels,
@@ -183,8 +189,6 @@ public class CrossValidationEvaluator {
 	@SuppressWarnings("unchecked")
 	private static DataModel[] prepareBootstrap(DataModel dataModel, int setCount) throws TasteException {
 		
-		Random random = RandomUtils.getRandom();
-
 		int numUsers = dataModel.getNumUsers();
 
 		@SuppressWarnings("rawtypes")
@@ -206,14 +210,22 @@ public class CrossValidationEvaluator {
 				userPreferances[i] = Lists.newArrayListWithCapacity(3);
 			}
 
-			PreferenceArray userPrefs = dataModel
-					.getPreferencesFromUser(userID);
+			PreferenceArray userPrefs = dataModel.getPreferencesFromUser(userID);
+			
 			int numPrefs = userPrefs.length();
-			for (int i = 0; i < numPrefs; i++) {
+			ArrayList<Integer>randomIndices = new ArrayList<Integer>(numPrefs);
+
+	        for (int i = 0; i < numPrefs; i++) {                
+	        	randomIndices.add(i);
+	        }
+
+	        Collections.shuffle(randomIndices);
+			
+			for (int i = 0; i < (int)(numPrefs/2); i++) {
 
 				Preference newPref = new GenericPreference(userID,
-						userPrefs.getItemID(random.nextInt( numPrefs - 1 )), 
-						userPrefs.getValue(i));
+						userPrefs.getItemID(randomIndices.get(i)), 
+						userPrefs.getValue(randomIndices.get(i)));
 				userPreferances[prefCount % setCount].add(newPref);
 				prefCount++;
 			}
@@ -233,27 +245,15 @@ public class CrossValidationEvaluator {
 		return result;
 	}
 	
-//	@SuppressWarnings("unchecked")
-//	private static DataModel[] prepareJackknife(DataModel dataModel, int setCount) throws TasteException {
+//	private static DataModel prepareJackknife(DataModel dataModel) throws TasteException {
 //		
 //		int numUsers = dataModel.getNumUsers();
 //
-//		@SuppressWarnings("rawtypes")
-//		FastByIDMap[] resultPrefs = new FastByIDMap[setCount];
-//
-//		for (int i = 0; i < setCount; i++) {
-//			resultPrefs[i] = new FastByIDMap<PreferenceArray>(numUsers + 1);
-//		}
+//		FastByIDMap resultPrefs = new FastByIDMap<PreferenceArray>(numUsers + 1);
 //
 //		// TODO: implement jackknife
 //		
-//		DataModel[] result = new DataModel[setCount];
-//
-//		for (int i = 0; i < setCount; i++) {
-//			result[i] = new GenericDataModel(resultPrefs[i]);
-//		}
-//
-//		return result;
+//		return new GenericDataModel(resultPrefs);;
 //	}
 
 }
